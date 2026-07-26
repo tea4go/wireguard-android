@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: tunnel
+title: WireGuard Android 隧道库（Tunnel Library）
+scope:
+    - tunnel/
+source_files: []
+depends_on: []
+related_to:
+    - path: ui

@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: ""
+title: WireGuard Android 多模块工程
+scope:
+    - README.md
+    - COPYING
+    - .gitignore
+    - .gitmodules
+    - build.gradle.kts
+    - settings.gradle.kts
+    - gradle.properties
+    - sync-crowdin.sh
+    - gradlew
+source_files: []
+depends_on: []
+related_to: []

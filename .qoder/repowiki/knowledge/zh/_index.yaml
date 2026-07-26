@@ -1,0 +1,46 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+nodes_managed: true
+exported_at: "2026-07-26T16:13:52Z"
+modules:
+    "":
+        dir_name: WireGuard Android 多模块工程
+        title: WireGuard Android 多模块工程
+        scope:
+            - README.md
+            - COPYING
+            - .gitignore
+            - .gitmodules
+            - build.gradle.kts
+            - settings.gradle.kts
+            - gradle.properties
+            - sync-crowdin.sh
+            - gradlew
+        source_files: []
+        children:
+            - tunnel
+            - ui
+        depends_on: []
+        related_to: []
+    tunnel:
+        dir_name: WireGuard Android 隧道库（Tunnel Library）
+        title: WireGuard Android 隧道库（Tunnel Library）
+        scope:
+            - tunnel/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ui
+    ui:
+        dir_name: WireGuard Android 客户端 UI 应用
+        title: WireGuard Android 客户端 UI 应用
+        scope:
+            - ui/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: tunnel

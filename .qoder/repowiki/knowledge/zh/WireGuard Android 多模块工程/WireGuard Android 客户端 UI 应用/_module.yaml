@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: ui
+title: WireGuard Android 客户端 UI 应用
+scope:
+    - ui/
+source_files: []
+depends_on: []
+related_to:
+    - path: tunnel
