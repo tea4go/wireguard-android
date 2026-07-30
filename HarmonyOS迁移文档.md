@@ -1,8 +1,8 @@
 # WireGuard Android → HarmonyOS 迁移技术可行性分析文档
 
-> **版本**: 1.0  
-> **日期**: 2026-07-27  
-> **适用目标**: HarmonyOS NEXT (5.0) / OpenHarmony 4.x+  
+> **版本**: 1.0
+> **日期**: 2026-07-27
+> **适用目标**: HarmonyOS NEXT (5.0) / OpenHarmony 4.x+
 
 ---
 
