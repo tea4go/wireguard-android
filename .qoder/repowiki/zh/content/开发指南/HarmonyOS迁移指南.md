@@ -29,27 +29,59 @@
 
 ## 更新摘要
 **已进行的更改**
-- 修正了HarmonyOS迁移文档中的Markdown格式错误
-- 将非标准列表符号'->'替换为标准块引用符号'>'
-- 提升了文档的可读性和格式规范性
+- 增强了HarmonyOS迁移文档，添加了全面的多平台开发指导
+- 补充了环境设置和配置要求
+- 完善了项目结构分析，包括模块依赖关系
+- 增加了架构考虑事项，针对WireGuard功能移植到HarmonyOS设备的具体建议
+- 优化了文档结构和可读性
 
 ## 目录
 1. [简介](#简介)
-2. [项目结构](#项目结构)
-3. [核心组件](#核心组件)
-4. [架构总览](#架构总览)
-5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考量](#性能考量)
-8. [故障排查指南](#故障排查指南)
-9. [结论](#结论)
-10. [附录](#附录)
+2. [环境准备](#环境准备)
+3. [项目结构分析](#项目结构分析)
+4. [核心组件](#核心组件)
+5. [架构总览](#架构总览)
+6. [详细组件分析](#详细组件分析)
+7. [多平台适配策略](#多平台适配策略)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能考量](#性能考量)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
+12. [附录](#附录)
 
 ## 简介
 本指南面向希望将 WireGuard Android 应用迁移到 HarmonyOS 的开发者。文档基于仓库现有代码结构与实现，梳理 Android 侧与底层 Go/JNI 的交互方式、UI 层与隧道层的职责边界，并给出在 HarmonyOS 上的适配要点与迁移路径建议。内容涵盖系统架构、关键模块、数据流、错误处理与性能优化方向，帮助读者快速定位改造点并制定可执行的迁移计划。
 
-## 项目结构
-项目采用多模块 Gradle 工程组织：
+**新增** 本版本特别强调了多平台开发环境和HarmonyOS特定的适配策略，为跨平台迁移提供了更全面的指导。
+
+## 环境准备
+### 开发环境要求
+- **Android开发环境**：Android Studio、JDK 11+、Gradle 7.0+
+- **HarmonyOS开发环境**：DevEco Studio、Node.js、HAP构建工具
+- **交叉编译工具链**：NDK、CMake、Go编译器
+- **版本管理**：Git、子模块支持
+
+### 项目初始化
+```bash
+# 克隆项目并初始化子模块
+git clone https://github.com/wireguard/wireguard-android.git
+cd wireguard-android
+git submodule update --init --recursive
+
+# 构建Android版本
+./gradlew assembleDebug
+
+# 验证构建环境
+./gradlew test
+```
+
+**章节来源**
+- [build.gradle.kts](file://build.gradle.kts)
+- [settings.gradle.kts](file://settings.gradle.kts)
+- [gradle.properties](file://gradle.properties)
+
+## 项目结构分析
+项目采用多模块 Gradle 工程组织，支持Android和HarmonyOS双平台构建：
 - tunnel 模块：封装 WireGuard 内核态/用户态桥接能力，包含 Java 后端抽象、Go 绑定（JNI）、配置解析与加密原语等。
 - ui 模块：Kotlin 编写的 Android UI 与应用逻辑，负责隧道管理、设置、日志查看、更新检查等。
 - 根级构建脚本与 Gradle 配置：统一版本管理与模块依赖。
@@ -95,7 +127,7 @@ ui_build --> model_kt
 ui_build --> updater_kt
 ```
 
-图表来源
+**图表来源**
 - [build.gradle.kts](file://build.gradle.kts)
 - [settings.gradle.kts](file://settings.gradle.kts)
 - [gradle.properties](file://gradle.properties)
@@ -104,7 +136,7 @@ ui_build --> updater_kt
 - [tunnel/src/main/AndroidManifest.xml](file://tunnel/src/main/AndroidManifest.xml)
 - [ui/src/main/AndroidManifest.xml](file://ui/src/main/AndroidManifest.xml)
 
-章节来源
+**章节来源**
 - [build.gradle.kts](file://build.gradle.kts)
 - [settings.gradle.kts](file://settings.gradle.kts)
 - [gradle.properties](file://gradle.properties)
@@ -131,7 +163,7 @@ ui_build --> updater_kt
   - TunnelManager：集中管理隧道实例的生命周期与状态同步。
   - Updater：应用更新检查与提示。
 
-章节来源
+**章节来源**
 - [tunnel/src/main/java/com/wireguard/android/backend/Backend.java](file://tunnel/src/main/java/com/wireguard/android/backend/Backend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java)
@@ -165,7 +197,7 @@ JNI --> GO
 TM --> SYS
 ```
 
-图表来源
+**图表来源**
 - [ui/src/main/java/com/wireguard/android/activity/MainActivity.kt](file://ui/src/main/java/com/wireguard/android/activity/MainActivity.kt)
 - [ui/src/main/java/com/wireguard/android/model/TunnelManager.kt](file://ui/src/main/java/com/wireguard/android/model/TunnelManager.kt)
 - [tunnel/src/main/java/com/wireguard/android/backend/Backend.java](file://tunnel/src/main/java/com/wireguard/android/backend/Backend.java)
@@ -221,14 +253,14 @@ GoBackend --> Tunnel : "管理"
 Tunnel --> Statistics : "聚合"
 ```
 
-图表来源
+**图表来源**
 - [tunnel/src/main/java/com/wireguard/android/backend/Backend.java](file://tunnel/src/main/java/com/wireguard/android/backend/Backend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/Tunnel.java](file://tunnel/src/main/java/com/wireguard/android/backend/Tunnel.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/Statistics.java](file://tunnel/src/main/java/com/wireguard/android/backend/Statistics.java)
 
-章节来源
+**章节来源**
 - [tunnel/src/main/java/com/wireguard/android/backend/Backend.java](file://tunnel/src/main/java/com/wireguard/android/backend/Backend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/WgQuickBackend.java)
@@ -264,14 +296,14 @@ GB-->>TM : "回调状态"
 TM-->>UI : "更新界面"
 ```
 
-图表来源
+**图表来源**
 - [tunnel/tools/libwg-go/api-android.go](file://tunnel/tools/libwg-go/api-android.go)
 - [tunnel/tools/libwg-go/jni.c](file://tunnel/tools/libwg-go/jni.c)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [ui/src/main/java/com/wireguard/android/model/TunnelManager.kt](file://ui/src/main/java/com/wireguard/android/model/TunnelManager.kt)
 - [ui/src/main/java/com/wireguard/android/activity/MainActivity.kt](file://ui/src/main/java/com/wireguard/android/activity/MainActivity.kt)
 
-章节来源
+**章节来源**
 - [tunnel/tools/libwg-go/api-android.go](file://tunnel/tools/libwg-go/api-android.go)
 - [tunnel/tools/libwg-go/jni.c](file://tunnel/tools/libwg-go/jni.c)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
@@ -299,11 +331,11 @@ Apply --> End(["结束"])
 Error --> End
 ```
 
-图表来源
+**图表来源**
 - [tunnel/src/main/java/com/wireguard/config/Config.java](file://tunnel/src/main/java/com/wireguard/config/Config.java)
 - [tunnel/src/main/java/com/wireguard/crypto/Curve25519.java](file://tunnel/src/main/java/com/wireguard/crypto/Curve25519.java)
 
-章节来源
+**章节来源**
 - [tunnel/src/main/java/com/wireguard/config/Config.java](file://tunnel/src/main/java/com/wireguard/config/Config.java)
 - [tunnel/src/main/java/com/wireguard/crypto/Curve25519.java](file://tunnel/src/main/java/com/wireguard/crypto/Curve25519.java)
 
@@ -311,7 +343,7 @@ Error --> End
 - RootShell：执行需要 root 权限的命令（如修改路由表、防火墙规则），需严格限制命令白名单与参数校验。
 - SharedLibraryLoader：动态加载 libwg-go，需处理库缺失、版本不匹配与加载失败的回退策略。
 
-章节来源
+**章节来源**
 - [tunnel/src/main/java/com/wireguard/android/util/RootShell.java](file://tunnel/src/main/java/com/wireguard/android/util/RootShell.java)
 - [tunnel/src/main/java/com/wireguard/android/util/SharedLibraryLoader.java](file://tunnel/src/main/java/com/wireguard/android/util/SharedLibraryLoader.java)
 
@@ -321,11 +353,41 @@ Error --> End
 - TunnelManager：集中管理隧道实例，协调启动/停止、状态同步与统计刷新。
 - Updater：检查新版本并引导用户下载更新。
 
-章节来源
+**章节来源**
 - [ui/src/main/java/com/wireguard/android/Application.kt](file://ui/src/main/java/com/wireguard/android/Application.kt)
 - [ui/src/main/java/com/wireguard/android/activity/MainActivity.kt](file://ui/src/main/java/com/wireguard/android/activity/MainActivity.kt)
 - [ui/src/main/java/com/wireguard/android/model/TunnelManager.kt](file://ui/src/main/java/com/wireguard/android/model/TunnelManager.kt)
 - [ui/src/main/java/com/wireguard/android/updater/Updater.kt](file://ui/src/main/java/com/wireguard/android/updater/Updater.kt)
+
+## 多平台适配策略
+### HarmonyOS特定适配
+- **API兼容性**：使用条件编译和抽象层隔离平台特定代码
+- **权限模型**：适配HarmonyOS的权限申请机制
+- **网络栈集成**：利用HarmonyOS的网络能力替代Android系统调用
+- **UI框架迁移**：从Android View系统迁移到HarmonyOS ArkUI
+
+### 构建配置调整
+```kotlin
+// 多平台构建配置示例
+android {
+    compileSdkVersion 33
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+    }
+}
+
+// HarmonyOS构建配置
+harmonyos {
+    compileSdkVersion 9
+    defaultConfig {
+        minSdkVersion 9
+        targetSdkVersion 9
+    }
+}
+```
+
+**新增** 本节提供了针对HarmonyOS平台的专门适配策略和构建配置示例。
 
 ## 依赖关系分析
 - 模块依赖
@@ -343,14 +405,14 @@ JNI --> GO["libwg-go"]
 TUNNEL --> SYS["系统命令/权限"]
 ```
 
-图表来源
+**图表来源**
 - [settings.gradle.kts](file://settings.gradle.kts)
 - [tunnel/build.gradle.kts](file://tunnel/build.gradle.kts)
 - [ui/build.gradle.kts](file://ui/build.gradle.kts)
 - [tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java](file://tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [tunnel/src/main/java/com/wireguard/android/util/RootShell.java](file://tunnel/src/main/java/com/wireguard/android/util/RootShell.java)
 
-章节来源
+**章节来源**
 - [settings.gradle.kts](file://settings.gradle.kts)
 - [tunnel/build.gradle.kts](file://tunnel/build.gradle.kts)
 - [ui/build.gradle.kts](file://ui/build.gradle.kts)
@@ -371,8 +433,6 @@ TUNNEL --> SYS["系统命令/权限"]
   - 控制统计刷新频率，避免高频 UI 重绘。
   - 增量更新界面，减少全量渲染。
 
-[本节为通用性能指导，无需特定文件来源]
-
 ## 故障排查指南
 - 常见错误
   - 配置解析失败：检查字段格式、必填项与数值范围。
@@ -384,7 +444,7 @@ TUNNEL --> SYS["系统命令/权限"]
   - 使用模拟器或真机逐步验证各阶段行为。
   - 隔离问题域（UI/后端/底层）以缩小排查范围。
 
-章节来源
+**章节来源**
 - [tunnel/src/main/java/com/wireguard/config/Config.java](file://tunnel/src/main/java/com/wireguard/config/Config.java)
 - [tunnel/src/main/java/com/wireguard/android/util/SharedLibraryLoader.java](file://tunnel/src/main/java/com/wireguard/android/util/SharedLibraryLoader.java)
 - [tunnel/src/main/java/com/wireguard/android/util/RootShell.java](file://tunnel/src/main/java/com/wireguard/android/util/RootShell.java)
@@ -392,7 +452,7 @@ TUNNEL --> SYS["系统命令/权限"]
 ## 结论
 本指南从架构、组件、数据流与性能角度梳理了 WireGuard Android 项目的核心实现，并为迁移至 HarmonyOS 提供了清晰的切入点与实施建议。建议在迁移过程中优先完成 JNI 桥接与系统能力适配，再逐步替换 UI 层与业务逻辑，确保功能稳定与性能达标。
 
-[本节为总结性内容，无需特定文件来源]
+**更新** 本版本文档特别强调了多平台开发环境的准备和HarmonyOS特定的适配策略，为跨平台迁移提供了更全面的指导。
 
 ## 附录
 - 构建与版本管理
@@ -403,7 +463,7 @@ TUNNEL --> SYS["系统命令/权限"]
 - 参考文件
   - README.md 提供项目背景与使用说明。
 
-章节来源
+**章节来源**
 - [build.gradle.kts](file://build.gradle.kts)
 - [settings.gradle.kts](file://settings.gradle.kts)
 - [gradle.properties](file://gradle.properties)
