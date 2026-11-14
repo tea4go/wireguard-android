@@ -10,9 +10,12 @@
 Thumbs.db
 build/
 *.apk
+*.aab
 *.class
 *.dex
 *.iml
 *.jks
+*.keystore
 gradlew.bat
 maint/
+.env
