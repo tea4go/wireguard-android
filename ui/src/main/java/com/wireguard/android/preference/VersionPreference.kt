@@ -27,7 +27,12 @@ class VersionPreference(context: Context, attrs: AttributeSet?) : Preference(con
 
     override fun getSummary() = versionSummary
 
-    override fun getTitle() = context.getString(R.string.version_title, BuildConfig.VERSION_NAME)
+    // version_title 模板已含前缀 "v"，而 BUILD_STAMP 自带 "v"（与 harmony 的
+    // AppVersion.ets 一致），显示时剥掉一个，避免出现 "vv1.0.2-B..."。
+    override fun getTitle() = context.getString(
+        R.string.version_title,
+        BuildConfig.BUILD_STAMP.removePrefix("v").ifEmpty { BuildConfig.VERSION_NAME }
+    )
 
     override fun onClick() {
         val intent = Intent(Intent.ACTION_VIEW)

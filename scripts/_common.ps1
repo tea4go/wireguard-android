@@ -101,10 +101,9 @@ function Get-CurrentVersion {
 .SYNOPSIS
   构建时递增版本号并写回 gradle.properties
 .DESCRIPTION
-  与 harmony 版一致：versionName 按 x.y.z 的 patch 段 +1（如 1.0.5 → 1.0.6）。
-  不做到 9 进位——Android 的 versionName 允许长段（如 1.0.20260315），
-  进位会把日期段改写成语义错误的 1.1.0。
-  versionCode 直接 +1，保证严格单调递增（Play 商店要求）。
+  与 harmony 版一致：versionName 为三位 x.y.z，patch 段 +1；
+  patch 超过 9 进位到 minor，minor 超过 9 进位到 major（1.0.9 → 1.1.0，1.9.9 → 2.0.0）。
+  versionCode 按 主*1000000 + 次*1000 + 修订 计算，随 versionName 严格单调递增。
 .OUTPUTS
   [hashtable] 包含 VersionName 和 VersionCode
 #>
@@ -112,19 +111,31 @@ function Update-BuildVersion {
     $current = Get-CurrentVersion
 
     $parts = $current.VersionName.Split('.')
-    if ($parts.Length -lt 3) {
-        Write-Host "错误：versionName 格式应为 x.y.z，实际为 $($current.VersionName)" -ForegroundColor Red
+    if ($parts.Length -ne 3) {
+        Write-Host "错误：versionName 必须是三位 x.y.z，实际为 $($current.VersionName)" -ForegroundColor Red
         exit 1
     }
 
-    $patch = 0
-    if (-not [int]::TryParse($parts[2], [ref]$patch)) {
-        Write-Host "错误：versionName 的 patch 段不是整数：$($parts[2])" -ForegroundColor Red
+    $major = 0; $minor = 0; $patch = 0
+    if (-not [int]::TryParse($parts[0], [ref]$major) -or
+        -not [int]::TryParse($parts[1], [ref]$minor) -or
+        -not [int]::TryParse($parts[2], [ref]$patch)) {
+        Write-Host "错误：versionName 各段必须是整数：$($current.VersionName)" -ForegroundColor Red
         exit 1
     }
-    $parts[2] = [string]($patch + 1)
-    $newVersionName = $parts -join '.'
-    $newVersionCode = $current.VersionCode + 1
+
+    $patch += 1
+    if ($patch -gt 9) {
+        $patch = 0
+        $minor += 1
+        if ($minor -gt 9) {
+            $minor = 0
+            $major += 1
+        }
+    }
+
+    $newVersionName = "$major.$minor.$patch"
+    $newVersionCode = $major * 1000000 + $minor * 1000 + $patch
 
     Write-Host "  当前版本：$($current.VersionName) (code: $($current.VersionCode))" -ForegroundColor Gray
     Write-Host "  构建版本：$newVersionName (code: $newVersionCode)" -ForegroundColor Green
@@ -136,6 +147,23 @@ function Update-BuildVersion {
         VersionName = $newVersionName
         VersionCode = $newVersionCode
     }
+}
+
+<#
+.SYNOPSIS
+  生成构建时间戳串
+.DESCRIPTION
+  格式与 harmony 的 gen-version.ps1 一致：v<versionName>-B<yyMMdd>-<HHmm>，
+  例如 v1.0.1-B261115-1430。由各构建脚本在调用 Gradle 前写入 WG_BUILD_STAMP，
+  ui/build.gradle.kts 再注入为 BuildConfig.BUILD_STAMP 供界面显示。
+.OUTPUTS
+  [string] 构建时间戳串
+#>
+function Get-BuildStamp {
+    param([Parameter(Mandatory = $true)][string]$VersionName)
+
+    $now = Get-Date
+    return "v$VersionName-B$($now.ToString('yyMMdd'))-$($now.ToString('HHmm'))"
 }
 
 <#
@@ -262,15 +290,21 @@ function Test-SigningConfig {
 <#
 .SYNOPSIS
   调用 scripts/build-win.ps1 执行 Gradle 任务（复用其 JDK/SDK/NDK/Go 环境探测）
+.DESCRIPTION
+  调用前设置 WG_BUILD_STAMP，供 ui/build.gradle.kts 注入 BuildConfig.BUILD_STAMP；
+  未显式传入时按当前版本号与当前时刻生成（v1.0.1-B261115-1430）。
 .PARAMETER Task
   Gradle 任务名，如 :ui:assembleRelease
 .PARAMETER Clean
   传入则以 clean 先清理
+.PARAMETER BuildStamp
+  构建时间戳串；省略时自动生成
 #>
 function Invoke-WinBuild {
     param(
         [Parameter(Mandatory = $true)][string]$Task,
-        [switch]$Clean
+        [switch]$Clean,
+        [string]$BuildStamp
     )
 
     $buildWin = Join-Path $PSScriptRoot 'build-win.ps1'
@@ -278,6 +312,12 @@ function Invoke-WinBuild {
         Write-Host "错误：未找到 $buildWin" -ForegroundColor Red
         exit 1
     }
+
+    if (-not $BuildStamp) {
+        $BuildStamp = Get-BuildStamp -VersionName (Get-CurrentVersion).VersionName
+    }
+    $env:WG_BUILD_STAMP = $BuildStamp
+    Write-Host "  构建戳：$BuildStamp" -ForegroundColor Gray
 
     $params = @{ Task = $Task }
     if ($Clean) { $params['Clean'] = $true }

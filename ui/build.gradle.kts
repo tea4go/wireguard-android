@@ -21,6 +21,10 @@ android {
         versionCode = providers.gradleProperty("wireguardVersionCode").get().toInt()
         versionName = providers.gradleProperty("wireguardVersionName").get()
         buildConfigField("int", "MIN_SDK_VERSION", minSdk.toString())
+        // 构建时间戳，由构建脚本通过 WG_BUILD_STAMP 传入（v1.0.1-B261115-1430）。
+        // 直接跑 Gradle 时为空串，界面回退为只显示版本号。
+        val buildStamp = providers.environmentVariable("WG_BUILD_STAMP").getOrElse("")
+        buildConfigField("String", "BUILD_STAMP", "\"$buildStamp\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
