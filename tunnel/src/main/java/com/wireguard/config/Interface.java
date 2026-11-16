@@ -22,6 +22,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import androidx.annotation.Nullable;
@@ -37,6 +39,10 @@ import androidx.annotation.Nullable;
 public final class Interface {
     private static final int MAX_UDP_PORT = 65535;
     private static final int MIN_UDP_PORT = 0;
+    private static final Pattern TCP_FORWARD_PATTERN = Pattern.compile(
+            "^(?:((?:\\d{1,3}\\.){3}\\d{1,3}):)?(\\d+)\\s*(?:->|→)\\s*((?:\\d{1,3}\\.){3}\\d{1,3}):(\\d+)$");
+    private static final Pattern TEST_PORT_PATTERN = Pattern.compile(
+            "^(?:((?:\\d{1,3}\\.){3}\\d{1,3}):)?(\\d+)$");
 
     private final Set<InetNetwork> addresses;
     private final Set<InetAddress> dnsServers;
@@ -46,6 +52,10 @@ public final class Interface {
     private final KeyPair keyPair;
     private final Optional<Integer> listenPort;
     private final Optional<Integer> mtu;
+    @Nullable private final TcpForwardRule tcpForward;
+    @Nullable private final TestServerRule testPort;
+    private final boolean tcpForwardEnabled;
+    private final boolean testServerEnabled;
 
     private Interface(final Builder builder) {
         // Defensively copy to ensure immutability even if the Builder is reused.
@@ -57,6 +67,10 @@ public final class Interface {
         keyPair = Objects.requireNonNull(builder.keyPair, "Interfaces must have a private key");
         listenPort = builder.listenPort;
         mtu = builder.mtu;
+        tcpForward = builder.tcpForward;
+        testPort = builder.testPort;
+        tcpForwardEnabled = builder.tcpForwardEnabled;
+        testServerEnabled = builder.testServerEnabled;
     }
 
     /**
@@ -92,6 +106,18 @@ public final class Interface {
                 case "mtu":
                     builder.parseMtu(attribute.getValue());
                     break;
+                case "tcpforward":
+                    builder.parseTcpForward(attribute.getValue());
+                    break;
+                case "tcpforwardenabled":
+                    builder.parseTcpForwardEnabled(attribute.getValue());
+                    break;
+                case "testport":
+                    builder.parseTestPort(attribute.getValue());
+                    break;
+                case "testserverenabled":
+                    builder.parseTestServerEnabled(attribute.getValue());
+                    break;
                 case "privatekey":
                     builder.parsePrivateKey(attribute.getValue());
                     break;
@@ -115,7 +141,11 @@ public final class Interface {
                 && includedApplications.equals(other.includedApplications)
                 && keyPair.equals(other.keyPair)
                 && listenPort.equals(other.listenPort)
-                && mtu.equals(other.mtu);
+                && mtu.equals(other.mtu)
+                && Objects.equals(tcpForward, other.tcpForward)
+                && Objects.equals(testPort, other.testPort)
+                && tcpForwardEnabled == other.tcpForwardEnabled
+                && testServerEnabled == other.testServerEnabled;
     }
 
     /**
@@ -195,6 +225,34 @@ public final class Interface {
         return mtu;
     }
 
+    /**
+     * Returns the TCP forwarding rule associated with the interface.
+     *
+     * @return a {@link TcpForwardRule}, or {@code null} if none is configured
+     */
+    @Nullable
+    public TcpForwardRule getTcpForward() {
+        return tcpForward;
+    }
+
+    /**
+     * Returns the test server rule associated with the interface.
+     *
+     * @return a {@link TestServerRule}, or {@code null} if none is configured
+     */
+    @Nullable
+    public TestServerRule getTestPort() {
+        return testPort;
+    }
+
+    public boolean getTcpForwardEnabled() {
+        return tcpForwardEnabled;
+    }
+
+    public boolean getTestServerEnabled() {
+        return testServerEnabled;
+    }
+
     @Override
     public int hashCode() {
         int hash = 1;
@@ -205,6 +263,10 @@ public final class Interface {
         hash = 31 * hash + keyPair.hashCode();
         hash = 31 * hash + listenPort.hashCode();
         hash = 31 * hash + mtu.hashCode();
+        hash = 31 * hash + Objects.hashCode(tcpForward);
+        hash = 31 * hash + Objects.hashCode(testPort);
+        hash = 31 * hash + Boolean.hashCode(tcpForwardEnabled);
+        hash = 31 * hash + Boolean.hashCode(testServerEnabled);
         return hash;
     }
 
@@ -244,6 +306,14 @@ public final class Interface {
             sb.append("IncludedApplications = ").append(Attribute.join(includedApplications)).append('\n');
         listenPort.ifPresent(lp -> sb.append("ListenPort = ").append(lp).append('\n'));
         mtu.ifPresent(m -> sb.append("MTU = ").append(m).append('\n'));
+        if (testPort != null) {
+            sb.append("TestPort = ").append(testPort).append('\n');
+            sb.append("TestServerEnabled = ").append(testServerEnabled).append('\n');
+        }
+        if (tcpForward != null) {
+            sb.append("TcpForward = ").append(tcpForward).append('\n');
+            sb.append("TcpForwardEnabled = ").append(tcpForwardEnabled).append('\n');
+        }
         sb.append("PrivateKey = ").append(keyPair.getPrivateKey().toBase64()).append('\n');
         return sb.toString();
     }
@@ -279,6 +349,12 @@ public final class Interface {
         private Optional<Integer> listenPort = Optional.empty();
         // Defaults to not present.
         private Optional<Integer> mtu = Optional.empty();
+        // Defaults to not present.
+        @Nullable private TcpForwardRule tcpForward;
+        // Defaults to not present.
+        @Nullable private TestServerRule testPort;
+        private boolean tcpForwardEnabled;
+        private boolean testServerEnabled;
 
         public Builder addAddress(final InetNetwork address) {
             addresses.add(address);
@@ -389,6 +465,59 @@ public final class Interface {
             } catch (final NumberFormatException e) {
                 throw new BadConfigException(Section.INTERFACE, Location.MTU, mtu, e);
             }
+        }
+
+        public Builder parseTcpForward(final String value) throws BadConfigException {
+            final Matcher match = TCP_FORWARD_PATTERN.matcher(value.trim());
+            if (!match.matches())
+                throw new BadConfigException(Section.INTERFACE, Location.TCP_FORWARD,
+                        Reason.INVALID_VALUE, value);
+            final String listenIp = match.group(1) == null ? null
+                    : validateIpv4Octets(match.group(1), value, Location.TCP_FORWARD);
+            final int listenPort = parseRequiredPort(Integer.parseInt(match.group(2)), Location.TCP_FORWARD);
+            final String targetIp = validateIpv4Octets(match.group(3), value, Location.TCP_FORWARD);
+            final int targetPort = parseRequiredPort(Integer.parseInt(match.group(4)), Location.TCP_FORWARD);
+            this.tcpForward = new TcpForwardRule(listenIp, listenPort, targetIp, targetPort);
+            return this;
+        }
+
+        public Builder parseTcpForwardEnabled(final String value) {
+            this.tcpForwardEnabled = value.trim().equalsIgnoreCase("true");
+            return this;
+        }
+
+        public Builder parseTestPort(final String value) throws BadConfigException {
+            final Matcher match = TEST_PORT_PATTERN.matcher(value.trim());
+            if (!match.matches())
+                throw new BadConfigException(Section.INTERFACE, Location.TEST_PORT,
+                        Reason.INVALID_VALUE, value);
+            final String listenIp = match.group(1) == null ? null
+                    : validateIpv4Octets(match.group(1), value, Location.TEST_PORT);
+            final int port = parseRequiredPort(Integer.parseInt(match.group(2)), Location.TEST_PORT);
+            this.testPort = new TestServerRule(listenIp, port);
+            return this;
+        }
+
+        public Builder parseTestServerEnabled(final String value) {
+            this.testServerEnabled = value.trim().equalsIgnoreCase("true");
+            return this;
+        }
+
+        private static String validateIpv4Octets(final String ip, final String value,
+                                                 final Location location) throws BadConfigException {
+            for (final String octet : ip.split("\\."))
+                if (Integer.parseInt(octet) > 255)
+                    throw new BadConfigException(Section.INTERFACE, location,
+                            Reason.INVALID_VALUE, value);
+            return ip;
+        }
+
+        private static int parseRequiredPort(final int port, final Location location)
+                throws BadConfigException {
+            if (port <= MIN_UDP_PORT || port > MAX_UDP_PORT)
+                throw new BadConfigException(Section.INTERFACE, location,
+                        Reason.INVALID_VALUE, String.valueOf(port));
+            return port;
         }
 
         public Builder parsePrivateKey(final String privateKey) throws BadConfigException {
