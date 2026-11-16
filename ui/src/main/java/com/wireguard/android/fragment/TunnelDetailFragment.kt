@@ -13,18 +13,25 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.MenuProvider
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import com.wireguard.android.Application
 import com.wireguard.android.R
+import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.android.databinding.TunnelDetailFragmentBinding
 import com.wireguard.android.databinding.TunnelDetailPeerBinding
 import com.wireguard.android.model.ObservableTunnel
+import com.wireguard.android.util.ErrorMessages
 import com.wireguard.android.util.QuantityFormatter
 import com.wireguard.config.Config
+import com.wireguard.config.TestServerRule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -102,8 +109,10 @@ class TunnelDetailFragment : BaseFragment(), MenuProvider {
                 } catch (_: Throwable) {
                     binding.config = null
                 }
+                updateCards()
             }
         }
+        if (newTunnel == null) lifecycleScope.launch { updateCards() }
         lastState = Tunnel.State.TOGGLE
         lifecycleScope.launch { updateStats() }
     }
@@ -120,6 +129,106 @@ class TunnelDetailFragment : BaseFragment(), MenuProvider {
         super.onViewStateRestored(savedInstanceState)
     }
 
+    private suspend fun updateCards() {
+        val binding = binding ?: return
+        val config = binding.config
+        val tunnel = binding.tunnel
+        val connected = tunnel?.state == Tunnel.State.UP
+        val backend = (Application.getBackend() as? GoBackend) ?: return
+
+        val tcpForward = config?.`interface`?.tcpForward
+        binding.tcpForwardDetails.visibility = if (tcpForward != null) View.VISIBLE else View.GONE
+        binding.tcpForwardDisabled.visibility = if (tcpForward != null) View.GONE else View.VISIBLE
+        if (tcpForward != null) {
+            val listenIp = tcpForward.listenIp ?: firstIpv4Address(config)
+            binding.tcpForwardListenIpText.text = listenIp
+            binding.tcpForwardListenPortText.text = tcpForward.listenPort.toString()
+            binding.tcpForwardTargetIpText.text = tcpForward.targetIp
+            binding.tcpForwardTargetPortText.text = tcpForward.targetPort.toString()
+            binding.tcpForwardCopyButton.setOnClickListener { showCopyTestCommandDialog(config) }
+            binding.tcpForwardTestButton.isEnabled = connected
+            binding.tcpForwardTestButton.setOnClickListener { testTcpForward(config) }
+        }
+        updateServiceRow(
+            binding.tcpForwardStatusRow, binding.tcpForwardStatusText, binding.tcpForwardToggleButton,
+            connected, tcpForward != null, backend.isTcpForwardRunning(),
+        ) { start -> toggleTcpForward(start) }
+
+        val testServer = config?.`interface`?.testPort
+        binding.testServerDetails.visibility = if (testServer != null) View.VISIBLE else View.GONE
+        binding.testServerDisabled.visibility = if (testServer != null) View.GONE else View.VISIBLE
+        if (testServer != null) {
+            val listenIp = testServer.listenIp ?: firstIpv4Address(config)
+            binding.testServerListenIpText.text = listenIp
+            binding.testServerPortText.text = testServer.port.toString()
+        }
+        updateServiceRow(
+            binding.testServerStatusRow, binding.testServerStatusText, binding.testServerToggleButton,
+            connected, testServer != null, backend.isTestServerRunning(),
+        ) { start -> toggleTestServer(start) }
+
+        val url = if (testServer != null) testServerUrl(config, testServer) else ""
+        binding.testServerUrlSection.visibility = if (url.isNotEmpty()) View.VISIBLE else View.GONE
+        if (url.isNotEmpty()) {
+            binding.testServerUrlText.text = url
+            binding.testServerUrlCopyButton.setOnClickListener { copyTestServerUrl(url) }
+        }
+    }
+
+    private fun updateServiceRow(
+        row: View, status: TextView, button: Button,
+        connected: Boolean, hasRule: Boolean, running: Boolean,
+        onToggle: (Boolean) -> Unit,
+    ) {
+        row.visibility = if (connected && hasRule) View.VISIBLE else View.GONE
+        if (!connected || !hasRule) return
+        status.setText(if (running) R.string.running else R.string.stopped)
+        status.setTextColor(
+            requireContext().getColor(if (running) android.R.color.holo_green_dark else android.R.color.darker_gray)
+        )
+        button.setText(if (running) R.string.stop else R.string.start)
+        button.setOnClickListener { onToggle(!running) }
+    }
+
+    private fun toggleTcpForward(start: Boolean) {
+        lifecycleScope.launch {
+            val backend = Application.getBackend() as? GoBackend ?: return@launch
+            try {
+                withContext(Dispatchers.IO) { if (start) backend.startTcpForward() else backend.stopTcpForward() }
+            } catch (e: Throwable) {
+                toast(getString(R.string.tcp_forward_toggle_failed, ErrorMessages[e]))
+            }
+            updateCards()
+        }
+    }
+
+    private fun toggleTestServer(start: Boolean) {
+        lifecycleScope.launch {
+            val backend = Application.getBackend() as? GoBackend ?: return@launch
+            try {
+                withContext(Dispatchers.IO) { if (start) backend.startTestServer() else backend.stopTestServer() }
+            } catch (e: Throwable) {
+                toast(getString(R.string.test_server_toggle_failed, ErrorMessages[e]))
+            }
+            updateCards()
+        }
+    }
+
+    private fun testServerUrl(config: Config, rule: TestServerRule): String {
+        val ip = rule.listenIp ?: firstIpv4Address(config)
+        return if (ip.isEmpty()) "" else "http://$ip:${rule.port}/autotest"
+    }
+
+    private fun copyTestServerUrl(url: String) {
+        val clipboard = requireContext().getSystemService(ClipboardManager::class.java) ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.test_server_url_hint), "curl --connect-timeout 3 -m 3 $url"))
+        toast(getString(R.string.copied_test_server_command))
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
+
     private suspend fun updateStats() {
         val binding = binding ?: return
         val tunnel = binding.tunnel ?: return
@@ -127,6 +236,7 @@ class TunnelDetailFragment : BaseFragment(), MenuProvider {
         val state = tunnel.state
         if (state != Tunnel.State.UP && lastState == state) return
         lastState = state
+        updateCards()
         try {
             val statistics = tunnel.getStatisticsAsync()
             for (i in 0 until binding.peersLayout.childCount) {

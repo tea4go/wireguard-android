@@ -330,4 +330,21 @@
     <string name="tcp_testing">Testing target connectivity&#8230;</string>
     <string name="tcp_test_ok">Target %s is reachable</string>
     <string name="tcp_test_fail">Target %s is unreachable</string>
+    <string name="tcp_forward">TCP Forward</string>
+    <string name="tcp_forward_listen_ip">Listen IP</string>
+    <string name="tcp_forward_listen_port">Listen Port</string>
+    <string name="tcp_forward_target_ip">Target IP</string>
+    <string name="tcp_forward_target_port">Target Port</string>
+    <string name="tcp_test">Test</string>
+    <string name="test_server">Test Server</string>
+    <string name="test_port">Test Port</string>
+    <string name="running">Running</string>
+    <string name="stopped">Stopped</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="disabled_placeholder">(Disabled)</string>
+    <string name="test_server_url_hint">Test via curl, expect: OK</string>
+    <string name="copy_action">Copy</string>
+    <string name="tcp_forward_toggle_failed">TCP forward failed: %s</string>
+    <string name="test_server_toggle_failed">Test server failed: %s</string>
 </resources>

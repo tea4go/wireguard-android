@@ -25,6 +25,7 @@ import com.wireguard.crypto.Key;
 import com.wireguard.crypto.KeyFormatException;
 import com.wireguard.util.NonNullForAll;
 
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.Collections;
@@ -414,6 +415,49 @@ public final class GoBackend implements Backend {
     private void stopServices() {
         testHttpServer.stop();
         tcpForwarder.stop();
+    }
+
+    public boolean isTcpForwardRunning() {
+        return tcpForwarder.isRunning();
+    }
+
+    public synchronized void startTcpForward() throws IOException {
+        final Config config = currentConfig;
+        final TcpForwardRule rule = config == null ? null : config.getInterface().getTcpForward();
+        if (rule == null)
+            throw new IOException("No TcpForward rule in the current configuration");
+        final String bindIp = resolveListenIp(rule.getListenIp());
+        tcpForwarder.start(bindIp, rule.getListenPort(), rule.getTargetIp(), rule.getTargetPort());
+    }
+
+    public void stopTcpForward() {
+        tcpForwarder.stop();
+    }
+
+    public boolean isTestServerRunning() {
+        return testHttpServer.isServerRunning();
+    }
+
+    public synchronized void startTestServer() throws IOException {
+        final Config config = currentConfig;
+        final TestServerRule rule = config == null ? null : config.getInterface().getTestPort();
+        if (rule == null)
+            throw new IOException("No TestPort rule in the current configuration");
+        testHttpServer.start(rule.getPort(), resolveListenIp(rule.getListenIp()));
+    }
+
+    public void stopTestServer() {
+        testHttpServer.stop();
+    }
+
+    private String resolveListenIp(@Nullable final String listenIp) throws IOException {
+        if (listenIp != null)
+            return listenIp;
+        final Config config = currentConfig;
+        final InetAddress firstIpv4 = config == null ? null : firstIpv4Address(config.getInterface());
+        if (firstIpv4 == null)
+            throw new IOException("Interface has no IPv4 address to listen on");
+        return firstIpv4.getHostAddress();
     }
 
     @Nullable
