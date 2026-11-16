@@ -107,10 +107,6 @@ class NodeSyncDialogFragment : DialogFragment() {
         }
     }
 
-    private fun reportError(e: Throwable) {
-        statusText.text = GistSyncErrorMessages.message(requireContext(), e, false)
-    }
-
     private suspend fun loadComparison() {
         val settings = currentSettings()
         if (settings.gistId.isEmpty()) {
