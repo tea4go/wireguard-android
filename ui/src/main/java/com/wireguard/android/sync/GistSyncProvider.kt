@@ -93,6 +93,33 @@ class GistSyncProvider(
         request("$apiBase/${urlEncode(gistId)}", "PATCH", token, body)
     }
 
+    /** Creates a gist with a single named file from raw (non-snapshot) content. */
+    fun createRawGist(token: String, description: String, fileName: String, content: String): String {
+        if (token.isEmpty()) throw GistSync.SyncException("TOKEN_REQUIRED")
+        val body = buildString {
+            append("{\"description\":").append(GistSync.quote(description))
+            append(",\"public\":false,\"files\":{")
+            append(GistSync.quote(fileName))
+            append(":{\"content\":").append(GistSync.quote(content)).append("}}}")
+        }
+        val gist = parseGist(request(apiBase, "POST", token, body))
+        if (gist.id.isEmpty()) throw GistSync.SyncException("INVALID_RESPONSE")
+        return gist.id
+    }
+
+    /** Creates or updates a single named file inside an existing gist. */
+    fun patchFile(settings: GistSync.SyncSettings, fileName: String, content: String) {
+        val token = settings.token.trim()
+        val gistId = settings.gistId.trim()
+        if (token.isEmpty()) throw GistSync.SyncException("TOKEN_REQUIRED")
+        if (gistId.isEmpty()) throw GistSync.SyncException("GIST_ID_REQUIRED")
+        val body = "{\"files\":{${GistSync.quote(fileName)}:{\"content\":${GistSync.quote(content)}}}}"
+        request("$apiBase/${urlEncode(gistId)}", "PATCH", token, body)
+    }
+
+    /** Fetches the gist document for [settings]. */
+    fun getDocument(settings: GistSync.SyncSettings): GistSync.GistDocument = getGist(settings)
+
     private fun getGist(settings: GistSync.SyncSettings): GistSync.GistDocument {
         val token = settings.token.trim()
         val gistId = settings.gistId.trim()
