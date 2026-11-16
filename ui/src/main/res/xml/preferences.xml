@@ -15,6 +15,18 @@
         android:summaryOn="@string/restore_on_boot_summary_on"
         android:title="@string/restore_on_boot_title" />
     <com.wireguard.android.preference.ZipExporterPreference android:key="zip_exporter" />
+    <Preference
+        android:key="gitee_sync"
+        android:summary="@string/gitee_sync_description"
+        android:title="@string/gitee_sync" />
+    <Preference
+        android:key="github_sync"
+        android:summary="@string/github_sync_description"
+        android:title="@string/github_sync" />
+    <Preference
+        android:key="gitee_node_sync"
+        android:summary="@string/gitee_node_sync_description"
+        android:title="@string/gitee_node_sync" />
     <com.wireguard.android.preference.QuickTilePreference android:key="quick_tile" />
     <Preference
         android:key="log_viewer"
@@ -28,6 +40,13 @@
         android:summaryOff="@string/dark_theme_summary_off"
         android:summaryOn="@string/dark_theme_summary_on"
         android:title="@string/dark_theme_title" />
+    <com.wireguard.android.preference.LanguagePreference
+        android:entries="@array/language_entries"
+        android:entryValues="@array/language_values"
+        android:key="app_language"
+        android:persistent="false"
+        android:singleLineTitle="false"
+        android:title="@string/language" />
     <CheckBoxPreference
         android:defaultValue="false"
         android:key="multiple_tunnels"

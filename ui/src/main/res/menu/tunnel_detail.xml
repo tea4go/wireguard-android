@@ -10,4 +10,12 @@
         android:icon="@drawable/ic_action_edit"
         android:title="@string/edit"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/menu_action_copy_test_command"
+        android:title="@string/copy_test_command"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_action_test_tcp"
+        android:title="@string/test_tcp"
+        app:showAsAction="never" />
 </menu>

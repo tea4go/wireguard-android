@@ -20,6 +20,8 @@ import com.wireguard.android.Application
 import com.wireguard.android.QuickTileService
 import com.wireguard.android.R
 import com.wireguard.android.backend.WgQuickBackend
+import com.wireguard.android.preference.GistSyncDialogFragment
+import com.wireguard.android.preference.NodeSyncDialogFragment
 import com.wireguard.android.preference.PreferencesPreferenceDataStore
 import com.wireguard.android.util.AdminKnobs
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +94,18 @@ class SettingsActivity : AppCompatActivity() {
             }
             preferenceManager.findPreference<Preference>("log_viewer")?.setOnPreferenceClickListener {
                 startActivity(Intent(requireContext(), LogViewerActivity::class.java))
+                true
+            }
+            preferenceManager.findPreference<Preference>("gitee_sync")?.setOnPreferenceClickListener {
+                GistSyncDialogFragment.newInstance("gitee").show(childFragmentManager, "gitee_sync")
+                true
+            }
+            preferenceManager.findPreference<Preference>("github_sync")?.setOnPreferenceClickListener {
+                GistSyncDialogFragment.newInstance("github").show(childFragmentManager, "github_sync")
+                true
+            }
+            preferenceManager.findPreference<Preference>("gitee_node_sync")?.setOnPreferenceClickListener {
+                NodeSyncDialogFragment().show(childFragmentManager, "gitee_node_sync")
                 true
             }
             val kernelModuleEnabler = preferenceManager.findPreference<Preference>("kernel_module_enabler")
