@@ -19,10 +19,13 @@ import com.wireguard.config.Config;
 import com.wireguard.config.InetEndpoint;
 import com.wireguard.config.InetNetwork;
 import com.wireguard.config.Peer;
+import com.wireguard.config.TcpForwardRule;
+import com.wireguard.config.TestServerRule;
 import com.wireguard.crypto.Key;
 import com.wireguard.crypto.KeyFormatException;
 import com.wireguard.util.NonNullForAll;
 
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.Set;
@@ -45,6 +48,8 @@ public final class GoBackend implements Backend {
     @Nullable private static AlwaysOnCallback alwaysOnCallback;
     private static CompletableFuture<VpnService> vpnService = new CompletableFuture<>();
     private final Context context;
+    private final TcpForwarder tcpForwarder = new TcpForwarder();
+    private final HttpServer testHttpServer = new HttpServer();
     @Nullable private Config currentConfig;
     @Nullable private Tunnel currentTunnel;
     private int currentTunnelHandle = -1;
@@ -348,11 +353,14 @@ public final class GoBackend implements Backend {
 
             service.protect(wgGetSocketV4(currentTunnelHandle));
             service.protect(wgGetSocketV6(currentTunnelHandle));
+
+            startServices(config);
         } else {
             if (currentTunnelHandle == -1) {
                 Log.w(TAG, "Tunnel already down");
                 return;
             }
+            stopServices();
             int handleToClose = currentTunnelHandle;
             currentTunnel = null;
             currentTunnelHandle = -1;
@@ -364,6 +372,58 @@ public final class GoBackend implements Backend {
         }
 
         tunnel.onStateChange(state);
+    }
+
+    private void startServices(final Config config) {
+        final com.wireguard.config.Interface iface = config.getInterface();
+        final InetAddress firstIpv4 = firstIpv4Address(iface);
+        final String defaultListenIp = firstIpv4 != null ? firstIpv4.getHostAddress() : null;
+
+        final TestServerRule testServer = iface.getTestPort();
+        if (testServer != null && iface.getTestServerEnabled()) {
+            final String bindIp = testServer.getListenIp() != null ? testServer.getListenIp() : defaultListenIp;
+            if (bindIp == null) {
+                Log.w(TAG, "HTTP server requires an Interface IPv4 address");
+            } else {
+                try {
+                    testHttpServer.start(testServer.getPort(), bindIp);
+                    Log.i(TAG, "Test HTTP server started: http://" + bindIp + ':' + testServer.getPort() + "/autotest");
+                } catch (final Exception e) {
+                    Log.w(TAG, "HTTP server start failed", e);
+                }
+            }
+        }
+
+        final TcpForwardRule rule = iface.getTcpForward();
+        if (rule == null || !iface.getTcpForwardEnabled())
+            return;
+        final String bindIp = rule.getListenIp() != null ? rule.getListenIp() : defaultListenIp;
+        if (bindIp == null) {
+            Log.w(TAG, "TCP forwarder requires an Interface IPv4 address");
+            return;
+        }
+        try {
+            tcpForwarder.start(bindIp, rule.getListenPort(), rule.getTargetIp(), rule.getTargetPort());
+            Log.i(TAG, "TCP port forward started: " + bindIp + ':' + rule.getListenPort()
+                    + " -> " + rule.getTargetIp() + ':' + rule.getTargetPort());
+        } catch (final Exception e) {
+            Log.w(TAG, "TCP forwarder start failed", e);
+        }
+    }
+
+    private void stopServices() {
+        testHttpServer.stop();
+        tcpForwarder.stop();
+    }
+
+    @Nullable
+    private static InetAddress firstIpv4Address(final com.wireguard.config.Interface iface) {
+        for (final InetNetwork network : iface.getAddresses()) {
+            final InetAddress address = network.getAddress();
+            if (address instanceof Inet4Address)
+                return address;
+        }
+        return null;
     }
 
     /**
@@ -393,6 +453,7 @@ public final class GoBackend implements Backend {
         @Override
         public void onDestroy() {
             if (owner != null) {
+                owner.stopServices();
                 final Tunnel tunnel = owner.currentTunnel;
                 if (tunnel != null) {
                     if (owner.currentTunnelHandle != -1)
